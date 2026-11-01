@@ -62,15 +62,23 @@ public static class LandingAidText
     };
 
     /// <summary>Magnetic course from the localizer's true heading and the magnetic variation
-    /// (east positive, as navdata stores it), as a whole degree from 1 to 360.
+    /// (east positive, as navdata stores it), as a whole degree from 1 to 360. The FALLBACK:
+    /// the course said is the procedure's published one (<see cref="PublishedLocalizerCourse"/>)
+    /// whenever an approach flies the localizer, and this only when none does.
     /// <para>⚠️ Pass the LOCALIZER's own variation (`ils.mag_var`), and the airport's only when
-    /// the row has none. navdata stores each localizer's published course as its true heading
-    /// plus its own variation: true less `ils.mag_var` is a whole degree for 4,508 of 4,515
-    /// rows (MSFS 2020), while the airport's variation gives a different course for 2,372 of
-    /// them, 38 degrees off at BGTL (85 published, 123 from the airport's).</para></summary>
+    /// the row has none. In the contributor's MSFS 2020 build each localizer's published course
+    /// is its true heading less its own variation (a whole degree for 4,508 of 4,515 rows),
+    /// while the airport's variation gives a different course for 2,372 of them, 38 degrees
+    /// off at BGTL (85 published, 123 from the airport's). In an MSFS 2024 build `ils.mag_var`
+    /// is today's variation, so this can be a few degrees off the chart there.</para></summary>
     public static int MagneticCourse(double locHeadingTrue, double magVar)
+        => WholeCourse(locHeadingTrue - magVar);
+
+    /// <summary>A course in degrees as a whole degree from 1 to 360 (north is 360, never 0),
+    /// halves rounded away from zero.</summary>
+    public static int WholeCourse(double degrees)
     {
-        int rounded = (int)Math.Round(locHeadingTrue - magVar, MidpointRounding.AwayFromZero);
+        int rounded = (int)Math.Round(degrees, MidpointRounding.AwayFromZero);
         return ((rounded % 360) + 360 - 1) % 360 + 1;
     }
 

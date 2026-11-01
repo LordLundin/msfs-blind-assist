@@ -28,7 +28,9 @@ public class Runway
         /// <see cref="LandingAidText.OffsetFacility"/>.</summary>
         public string ILSType { get; set; } = string.Empty;
 
-        /// <summary>The localizer's magnetic course, 1-360; 0 while there is no localizer.</summary>
+        /// <summary>The localizer's magnetic course, 1-360: the approach chart's
+        /// (<see cref="PublishedLocalizerCourse"/>), or worked out from its heading when no
+        /// procedure flies it. 0 while there is no localizer.</summary>
         public int ILSCourseMag { get; set; }
 
         public double ThresholdOffset { get; set; }

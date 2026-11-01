@@ -92,6 +92,14 @@ CREATE TABLE ils (
     dme_range REAL, dme_altitude REAL, dme_lonx REAL, dme_laty REAL,
     gs_range REAL, gs_pitch REAL, gs_altitude REAL, gs_lonx REAL, gs_laty REAL,
     altitude REAL, lonx REAL, laty REAL
+);
+-- Only the columns PublishedLocalizerCourse.ReadAirport reads: the published localizer course.
+CREATE TABLE approach (
+    approach_id INTEGER PRIMARY KEY, airport_id INTEGER, airport_ident TEXT, runway_name TEXT, type TEXT
+);
+CREATE TABLE approach_leg (
+    approach_leg_id INTEGER PRIMARY KEY, approach_id INTEGER, is_missed INTEGER, type TEXT,
+    fix_ident TEXT, recommended_fix_ident TEXT, is_true_course INTEGER, course REAL
 );";
         using var cmd = _writeConnection!.CreateCommand();
         cmd.CommandText = sql;
@@ -141,6 +149,22 @@ CREATE TABLE ils (
             ("offset_threshold", 0), ("has_closed_markings", 0),
             ("is_takeoff", 1), ("is_landing", 1), ("is_pattern", "Yes"), ("end_type", "PRIMARY"),
             ("left_vasi_type", null), ("left_vasi_pitch", null), ("right_vasi_type", null), ("right_vasi_pitch", null));
+
+    /// <summary>An approach procedure to one runway end; its legs go in with
+    /// <see cref="InsertApproachLeg"/>.</summary>
+    public void InsertApproach(int approachId, int airportId, string airportIdent, string runwayName, string type = "ILS")
+        => Insert("approach",
+            ("approach_id", approachId), ("airport_id", airportId), ("airport_ident", airportIdent),
+            ("runway_name", runwayName), ("type", type));
+
+    /// <summary>A procedure leg, by default a CF leg with a magnetic course, flown on
+    /// <paramref name="navaidIdent"/> (navdatareader's recommended_fix_ident).</summary>
+    public void InsertApproachLeg(int legId, int approachId, string fixIdent, string navaidIdent, double course,
+        bool isMissed = false, bool isTrueCourse = false, string legType = "CF")
+        => Insert("approach_leg",
+            ("approach_leg_id", legId), ("approach_id", approachId), ("is_missed", isMissed ? 1 : 0),
+            ("type", legType), ("fix_ident", fixIdent), ("recommended_fix_ident", navaidIdent),
+            ("is_true_course", isTrueCourse ? 1 : 0), ("course", course));
 
     /// <summary>
     /// An ORPHANED ils row: correct ident/frequency/position/course, but the

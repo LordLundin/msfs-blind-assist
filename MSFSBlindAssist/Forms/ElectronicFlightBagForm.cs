@@ -2570,6 +2570,15 @@ public partial class ElectronicFlightBagForm : Form
                         sb.AppendLine("LOCALIZER AND GLIDESLOPE:");
                         double airportMagVar = reader["mag_var"] is object mv && mv != DBNull.Value
                             ? Convert.ToDouble(mv, inv) : 0.0;
+                        // The course is the approach chart's (PublishedLocalizerCourse), as in the
+                        // runway lists; worked out from the localizer's heading only when no
+                        // procedure flies it.
+                        List<PublishedLocalizerCourse.Leg>? approachLegs = null;
+                        int LocalizerCourse(string ident, double locHeadingTrue, double localizerMagVar)
+                            => PublishedLocalizerCourse.Select(
+                                   approachLegs ??= PublishedLocalizerCourse.ReadAirport(connection, airportId),
+                                   runwayId, ident)
+                               ?? LandingAidText.MagneticCourse(locHeadingTrue, localizerMagVar);
                         var ilsIdent = reader["ils_ident"]?.ToString();
                         bool ilsRendered = false;
                         if (!string.IsNullOrEmpty(ilsIdent))
@@ -2603,7 +2612,7 @@ public partial class ElectronicFlightBagForm : Form
                                             sb.AppendLine("  " + LandingAidText.Describe(
                                                 LandingAidText.HasGlideslope(gsRangeRaw, gsPitchRaw), ilsType,
                                                 Convert.ToDouble(freq, inv) / 1000.0,
-                                                LandingAidText.MagneticCourse(locHeading, ilsMagVar),
+                                                LocalizerCourse(ilsIdent, locHeading, ilsMagVar),
                                                 gsPitchRaw ?? 0.0));
                                         }
                                         sb.AppendLine($"  Ident:                {ilsIdent}");
@@ -2663,7 +2672,7 @@ public partial class ElectronicFlightBagForm : Form
                             {
                                 sb.AppendLine("  " + LandingAidText.Describe(
                                     recoveredIls.HasGlideslope, recoveredIls.Type, recoveredIls.Frequency,
-                                    LandingAidText.MagneticCourse(recoveredIls.LocalizerHeading, recoveredIls.MagVar ?? airportMagVar),
+                                    LocalizerCourse(recoveredIls.Ident, recoveredIls.LocalizerHeading, recoveredIls.MagVar ?? airportMagVar),
                                     recoveredIls.HasGlideslope ? recoveredIls.GlideslopePitch : 0.0));
                                 sb.AppendLine($"  Ident:                {recoveredIls.Ident}");
                                 sb.AppendLine($"  Frequency:            {FormatIlsFrequency(recoveredIls.Frequency)}");
