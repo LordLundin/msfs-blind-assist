@@ -2593,13 +2593,17 @@ public partial class ElectronicFlightBagForm : Form
                                         double? gsPitchRaw = ilsReader["gs_pitch"] is object gp && gp != DBNull.Value ? Convert.ToDouble(gp, inv) : null;
                                         double locHeading = ilsReader["loc_heading"] is object lh && lh != DBNull.Value ? Convert.ToDouble(lh, inv) : 0.0;
                                         string? ilsType = ilsReader["type"] is object ty && ty != DBNull.Value ? Convert.ToString(ty, inv) : null;
+                                        // The localizer's own variation, the airport's only when it has none
+                                        // (LandingAidText.MagneticCourse: the airport's is 38° out at BGTL).
+                                        double ilsMagVar = ilsReader["mag_var"] is object ilsMv && ilsMv != DBNull.Value
+                                            ? Convert.ToDouble(ilsMv, inv) : airportMagVar;
                                         // ils.frequency is kHz in both the MSFS 2020 and 2024 builds.
                                         if (freq != DBNull.Value)
                                         {
                                             sb.AppendLine("  " + LandingAidText.Describe(
                                                 LandingAidText.HasGlideslope(gsRangeRaw, gsPitchRaw), ilsType,
                                                 Convert.ToDouble(freq, inv) / 1000.0,
-                                                LandingAidText.MagneticCourse(locHeading, airportMagVar),
+                                                LandingAidText.MagneticCourse(locHeading, ilsMagVar),
                                                 gsPitchRaw ?? 0.0));
                                         }
                                         sb.AppendLine($"  Ident:                {ilsIdent}");
@@ -2659,7 +2663,7 @@ public partial class ElectronicFlightBagForm : Form
                             {
                                 sb.AppendLine("  " + LandingAidText.Describe(
                                     recoveredIls.HasGlideslope, recoveredIls.Type, recoveredIls.Frequency,
-                                    LandingAidText.MagneticCourse(recoveredIls.LocalizerHeading, airportMagVar),
+                                    LandingAidText.MagneticCourse(recoveredIls.LocalizerHeading, recoveredIls.MagVar ?? airportMagVar),
                                     recoveredIls.HasGlideslope ? recoveredIls.GlideslopePitch : 0.0));
                                 sb.AppendLine($"  Ident:                {recoveredIls.Ident}");
                                 sb.AppendLine($"  Frequency:            {FormatIlsFrequency(recoveredIls.Frequency)}");

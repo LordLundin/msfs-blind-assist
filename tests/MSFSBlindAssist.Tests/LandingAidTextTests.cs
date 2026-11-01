@@ -98,6 +98,11 @@ public class LandingAidTextTests
     private static RunwayFixtureDb BuildTwoRunwayAirport()
     {
         // 16 has a localizer only (ESST's shape); 34 has a CAT III ILS; 09/27 has neither.
+        //
+        // The course is read with the LOCALIZER's own variation: NST carries ESST's real pair
+        // (true 157.7037, ils.mag_var 5.7037, published course 152), which the airport's 5.0
+        // would round to 153. IST has no variation of its own, so it falls back to the
+        // airport's: 337.7 - 5.0 = 333.
         var db = new RunwayFixtureDb();
         db.InsertAirport(1, Icao, Icao, magVar: 5.0);
         db.InsertRunwayEnd(1, "16", ilsIdent: "NST", heading: 157.7);
@@ -106,7 +111,8 @@ public class LandingAidTextTests
         db.InsertRunwayEnd(3, "09", ilsIdent: null, heading: 90.0, lonx: 1.0, laty: 1.0);
         db.InsertRunwayEnd(4, "27", ilsIdent: null, heading: 270.0, lonx: 1.01, laty: 1.0);
         db.InsertRunway(2, 1, 3, 4, heading: 90.0, lonx: 1.0, laty: 1.0);
-        db.InsertLocalizerOnly("NST", Icao, "16", locHeading: 157.7, frequency: 108700, name: "ILS RW16");
+        db.InsertLocalizerOnly("NST", Icao, "16", locHeading: 157.7037, frequency: 108700, name: "ILS RW16",
+            magVar: 5.7037);
         db.InsertIls("IST", Icao, "34", locHeading: 337.7, frequency: 110900,
             gsPitch: 3.0, gsRange: 10, type: "3");
         db.Seal();
@@ -121,7 +127,7 @@ public class LandingAidTextTests
         {
             string page = ElectronicFlightBagForm.GetRunwayDetailedInfoCore(db.DbPath, "FS2020", Icao, "16");
 
-            Assert.Contains("Localizer 108.70, course 153, no glideslope", page);
+            Assert.Contains("Localizer 108.70, course 152, no glideslope", page);
             Assert.DoesNotContain("ILS Ident", page);
             Assert.DoesNotContain("ILS Frequency", page);
             Assert.DoesNotContain("ILS Type", page);
@@ -159,7 +165,7 @@ public class LandingAidTextTests
             var runways = new LittleNavMapProvider(db.DbPath, "FS2020").GetRunways(Icao)
                 .ToDictionary(r => r.RunwayID);
 
-            Assert.EndsWith(" - Localizer 108.70, course 153, no glideslope", runways["16"].ToString());
+            Assert.EndsWith(" - Localizer 108.70, course 152, no glideslope", runways["16"].ToString());
             Assert.EndsWith(" - ILS CAT III 110.90, course 333, glideslope 3.0 degrees", runways["34"].ToString());
             Assert.DoesNotContain("ILS", runways["09"].ToString());
             Assert.DoesNotContain("Localizer", runways["09"].ToString());
@@ -177,7 +183,9 @@ public class LandingAidTextTests
         db.InsertRunwayEnd(101, "09", ilsIdent: "", heading: 90.0, lonx: 0.0, laty: 0.0);
         db.InsertRunwayEnd(102, "27", ilsIdent: "", heading: 270.0, lonx: 0.0323, laty: 0.0);
         db.InsertRunway(1, 1, 101, 102, heading: 90.0);
-        db.InsertLocalizerOnly("ILOC", null, null, locHeading: 90.0, frequency: 109100, lonx: 0.0323, laty: 0.0);
+        // Its own variation (2.0) wins over the airport's (0): course 88, not 90.
+        db.InsertLocalizerOnly("ILOC", null, null, locHeading: 90.0, frequency: 109100, lonx: 0.0323, laty: 0.0,
+            magVar: 2.0);
         db.Seal();
 
         var rwy09 = new LittleNavMapProvider(db.DbPath, "FS2024").GetRunways(Icao).Single(r => r.RunwayID == "09");
@@ -185,6 +193,6 @@ public class LandingAidTextTests
         Assert.Equal(109.10, rwy09.ILSFreq, 3);
         Assert.False(rwy09.ILSHasGlideslope);
         Assert.Equal(0.0, rwy09.GlideslopeAngleDeg);
-        Assert.EndsWith(" - Localizer 109.10, course 90, no glideslope", rwy09.ToString());
+        Assert.EndsWith(" - Localizer 109.10, course 88, no glideslope", rwy09.ToString());
     }
 }

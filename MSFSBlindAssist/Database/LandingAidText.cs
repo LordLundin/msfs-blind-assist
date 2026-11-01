@@ -34,7 +34,12 @@ public static class LandingAidText
     };
 
     /// <summary>Magnetic course from the localizer's true heading and the magnetic variation
-    /// (east positive, as navdata stores it), as a whole degree from 1 to 360.</summary>
+    /// (east positive, as navdata stores it), as a whole degree from 1 to 360.
+    /// <para>⚠️ Pass the LOCALIZER's own variation (`ils.mag_var`), and the airport's only when
+    /// the row has none. navdata stores each localizer's published course as its true heading
+    /// plus its own variation: true less `ils.mag_var` is a whole degree for 4,508 of 4,515
+    /// rows (MSFS 2020), while the airport's variation gives a different course for 2,372 of
+    /// them, 38 degrees off at BGTL (85 published, 123 from the airport's).</para></summary>
     public static int MagneticCourse(double locHeadingTrue, double magVar)
     {
         int rounded = (int)Math.Round(locHeadingTrue - magVar, MidpointRounding.AwayFromZero);

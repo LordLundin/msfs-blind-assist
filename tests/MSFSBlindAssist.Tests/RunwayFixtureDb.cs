@@ -163,22 +163,26 @@ CREATE TABLE ils (
     public void InsertIls(string ident, string locAirportIdent, string locRunwayName, double locHeading = 0,
         double frequency = 111100, double locWidth = 3.0, double range = 18,
         double lonx = 0, double laty = 0, double altitude = 0, double gsPitch = 0,
-        double dmeRange = 0, double gsRange = 0, string type = "ILS", string? name = null)
+        double dmeRange = 0, double gsRange = 0, string type = "ILS", string? name = null,
+        double? magVar = null)
         => InsertIlsRow(ident, locAirportIdent, locRunwayName, locHeading, frequency, locWidth, range,
-            name ?? $"ILS/GS {ident}", lonx, laty, gsPitch, altitude, dmeRange, gsRange, type);
+            name ?? $"ILS/GS {ident}", lonx, laty, gsPitch, altitude, dmeRange, gsRange, type, magVar);
 
     /// <summary>
     /// A localizer with NO glideslope, as navdatareader writes one (ils.type "0", gs_range and
     /// gs_pitch NULL): MSFS 2020's ESST 16 "NST" and 34 "ST". Some carry an "ILS RW…" name
-    /// regardless, so <paramref name="name"/> is settable.
+    /// regardless, so <paramref name="name"/> is settable. <paramref name="magVar"/> is the
+    /// localizer's OWN variation (ils.mag_var), which its course is read with; NULL falls back
+    /// to the airport's.
     /// </summary>
     public void InsertLocalizerOnly(string ident, string? locAirportIdent, string? locRunwayName,
-        double locHeading, double frequency, double lonx = 0, double laty = 0, string? name = null)
+        double locHeading, double frequency, double lonx = 0, double laty = 0, string? name = null,
+        double? magVar = null)
         => Insert("ils",
             ("ident", ident), ("loc_airport_ident", locAirportIdent), ("loc_runway_name", locRunwayName),
             ("frequency", frequency), ("name", name ?? $"LOC {ident}"), ("region", "K1"), ("type", "0"),
             ("loc_heading", locHeading), ("loc_width", 3.0), ("range", 18),
-            ("has_backcourse", 0), ("perf_indicator", "N/A"), ("provider", "N/A"), ("mag_var", 0),
+            ("has_backcourse", 0), ("perf_indicator", "N/A"), ("provider", "N/A"), ("mag_var", magVar),
             ("dme_range", null), ("dme_altitude", null), ("dme_lonx", null), ("dme_laty", null),
             ("gs_range", null), ("gs_pitch", null), ("gs_altitude", null), ("gs_lonx", null), ("gs_laty", null),
             ("altitude", 0), ("lonx", lonx), ("laty", laty));
@@ -192,12 +196,13 @@ CREATE TABLE ils (
     private void InsertIlsRow(string ident, string? locAirportIdent, string? locRunwayName,
         double locHeading, double frequency, double locWidth, double range,
         string name, double lonx, double laty, double gsPitch,
-        double altitude = 0, double dmeRange = 0, double gsRange = 0, string type = "ILS")
+        double altitude = 0, double dmeRange = 0, double gsRange = 0, string type = "ILS",
+        double? magVar = null)
         => Insert("ils",
             ("ident", ident), ("loc_airport_ident", locAirportIdent), ("loc_runway_name", locRunwayName),
             ("frequency", frequency), ("name", name), ("region", "K1"), ("type", type),
             ("loc_heading", locHeading), ("loc_width", locWidth), ("range", range),
-            ("has_backcourse", 0), ("perf_indicator", "N/A"), ("provider", "N/A"), ("mag_var", 0),
+            ("has_backcourse", 0), ("perf_indicator", "N/A"), ("provider", "N/A"), ("mag_var", magVar),
             ("dme_range", dmeRange), ("dme_altitude", dmeRange > 0 ? altitude : 0),
             ("dme_lonx", dmeRange > 0 ? lonx : 0), ("dme_laty", dmeRange > 0 ? laty : 0),
             ("gs_range", gsRange), ("gs_pitch", gsPitch), ("gs_altitude", gsRange > 0 ? altitude : 0),

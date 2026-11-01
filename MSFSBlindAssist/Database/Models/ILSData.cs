@@ -68,6 +68,10 @@ namespace MSFSBlindAssist.Database.Models
         /// </summary>
         public bool HasGlideslope { get; set; }
 
+        /// <summary>The localizer's OWN magnetic variation (ils.mag_var, east positive), null
+        /// when the row has none. Its true heading less this is the published course.</summary>
+        public double? MagVar { get; set; }
+
         /// <summary>navdatareader's `ils.type` code; see LandingAidText.Category.</summary>
         public string Type { get; set; } = string.Empty;
 

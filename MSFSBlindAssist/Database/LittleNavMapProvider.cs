@@ -147,11 +147,13 @@ public class LittleNavMapProvider : IAirportDataProvider, IAirportFacilitiesProv
                     ils_primary.gs_pitch as primary_ils_gs_pitch,
                     ils_primary.gs_range as primary_ils_gs_range,
                     ils_primary.type as primary_ils_type,
+                    ils_primary.mag_var as primary_ils_mag_var,
                     ils_secondary.frequency as secondary_ils_freq,
                     ils_secondary.loc_heading as secondary_ils_heading,
                     ils_secondary.gs_pitch as secondary_ils_gs_pitch,
                     ils_secondary.gs_range as secondary_ils_gs_range,
-                    ils_secondary.type as secondary_ils_type
+                    ils_secondary.type as secondary_ils_type,
+                    ils_secondary.mag_var as secondary_ils_mag_var
                 FROM runway r
                 JOIN runway_end re_primary ON r.primary_end_id = re_primary.runway_end_id
                 JOIN runway_end re_secondary ON r.secondary_end_id = re_secondary.runway_end_id
@@ -227,7 +229,7 @@ public class LittleNavMapProvider : IAirportDataProvider, IAirportFacilitiesProv
         // Fast path: direct join via loc_airport_ident + loc_runway_name. Works
         // for fs2020 (every ILS row populated) and the majority of fs2024 rows.
         var sql = @"SELECT ident, type, frequency, range, gs_range, gs_pitch, loc_heading, loc_width,
-                          lonx, laty, altitude, gs_lonx, gs_laty, gs_altitude
+                          lonx, laty, altitude, gs_lonx, gs_laty, gs_altitude, mag_var
                    FROM ils
                    WHERE UPPER(loc_airport_ident) = UPPER(@ICAO)
                      AND UPPER(loc_runway_name) = UPPER(@RunwayName)
@@ -396,7 +398,7 @@ public class LittleNavMapProvider : IAirportDataProvider, IAirportFacilitiesProv
 
             using var cmd = new SqliteCommand(@"
                 SELECT ident, type, frequency, range, gs_range, gs_pitch, loc_heading, loc_width,
-                       lonx, laty, altitude, gs_lonx, gs_laty, gs_altitude
+                       lonx, laty, altitude, gs_lonx, gs_laty, gs_altitude, mag_var
                 FROM ils
                 WHERE (loc_airport_ident IS NULL OR loc_airport_ident = '')
                   AND lonx BETWEEN @MinLon AND @MaxLon
@@ -434,7 +436,8 @@ public class LittleNavMapProvider : IAirportDataProvider, IAirportFacilitiesProv
             // From the RAW columns: GlideslopePitch above defaults a NULL to 3.0.
             HasGlideslope = LandingAidText.HasGlideslope(
                 SafeReadDouble(reader, "gs_range", 0.0), SafeReadDouble(reader, "gs_pitch", 0.0)),
-            Type = SafeReadText(reader, "type")
+            Type = SafeReadText(reader, "type"),
+            MagVar = SafeReadNullableDouble(reader, "mag_var")
         };
     }
 
@@ -854,6 +857,7 @@ public class LittleNavMapProvider : IAirportDataProvider, IAirportFacilitiesProv
         bool ilsHasGs = LandingAidText.HasGlideslope(
             SafeReadDouble(reader, $"{prefix}_ils_gs_range", 0.0), ilsGsPitch);
         string ilsType = SafeReadText(reader, $"{prefix}_ils_type");
+        double? ilsMagVar = SafeReadNullableDouble(reader, $"{prefix}_ils_mag_var");
 
         if (ilsFreq <= 0.0)
         {
@@ -879,6 +883,7 @@ public class LittleNavMapProvider : IAirportDataProvider, IAirportFacilitiesProv
                 ilsGsPitch = fallback.HasGlideslope ? fallback.GlideslopePitch : 0.0;
                 ilsHasGs = fallback.HasGlideslope;
                 ilsType = fallback.Type;
+                ilsMagVar = fallback.MagVar;
                 ilsIdent = fallback.Ident;
             }
         }
@@ -906,7 +911,8 @@ public class LittleNavMapProvider : IAirportDataProvider, IAirportFacilitiesProv
             ILSHeading = ilsHeading,
             ILSHasGlideslope = ilsFreq > 0.0 && ilsHasGs,
             ILSType = ilsFreq > 0.0 ? ilsType : string.Empty,
-            ILSCourseMag = ilsFreq > 0.0 ? LandingAidText.MagneticCourse(ilsHeading, magVar) : 0,
+            // The localizer's own variation, the airport's only when it has none (LandingAidText.MagneticCourse).
+            ILSCourseMag = ilsFreq > 0.0 ? LandingAidText.MagneticCourse(ilsHeading, ilsMagVar ?? magVar) : 0,
             ThresholdOffset = thresholdOffset,
             ThresholdElevation = altitude,
             GlideslopeAngleDeg = ilsGsPitch,
@@ -962,12 +968,21 @@ public class LittleNavMapProvider : IAirportDataProvider, IAirportFacilitiesProv
         }
     }
 
-    /// <summary>
-    /// Safely reads an integer column that may be missing or NULL. Integer twin of
-    /// <see cref="SafeReadDouble"/> — same DBNull caveat: <c>Convert.ToInt32(DBNull.Value)</c>
-    /// throws, so the bare <c>?? 0</c> pattern is unsafe for nullable columns like
-    /// <c>ils.gs_range</c> (NULL on localizer-only approaches).
-    /// </summary>
+    /// <summary>A double column, or null when it is absent or NULL.</summary>
+    private static double? SafeReadNullableDouble(SqliteDataReader reader, string columnName)
+    {
+        try
+        {
+            int ord = reader.GetOrdinal(columnName);
+            if (reader.IsDBNull(ord)) return null;
+            return Convert.ToDouble(reader.GetValue(ord), System.Globalization.CultureInfo.InvariantCulture);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     /// <summary>A text column as a trimmed string; "" when absent or NULL.</summary>
     private static string SafeReadText(SqliteDataReader reader, string columnName)
     {
@@ -983,6 +998,12 @@ public class LittleNavMapProvider : IAirportDataProvider, IAirportFacilitiesProv
         }
     }
 
+    /// <summary>
+    /// Safely reads an integer column that may be missing or NULL. Integer twin of
+    /// <see cref="SafeReadDouble"/> — same DBNull caveat: <c>Convert.ToInt32(DBNull.Value)</c>
+    /// throws, so the bare <c>?? 0</c> pattern is unsafe for nullable columns like
+    /// <c>ils.gs_range</c> (NULL on localizer-only approaches).
+    /// </summary>
     private static int SafeReadInt(SqliteDataReader reader, string columnName, int defaultValue)
     {
         try
