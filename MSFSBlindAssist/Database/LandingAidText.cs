@@ -18,6 +18,19 @@ namespace MSFSBlindAssist.Database;
 /// only when it is II or III: CAT I is 3,253 of the 4,082 ILS and would be noise on every
 /// one, while CAT II/III is what an autoland in fog is planned on.</para>
 ///
+/// <para>An offset approach is named for its facility, never "ILS" or "Localizer": an LDA or
+/// IGS course is not the runway's, so either word would promise a straight-in down the
+/// centreline that does not exist, the same false promise ESST's localizers made. An MSFS 2024
+/// navdatareader 1.2.4 build with a Navigraph update (4,272 `ils` rows) uses ARINC 424's codes:
+/// "A" LDA without a glideslope (27, KDCA 19 at 147 against a runway of 186), "L" LDA with a
+/// glideslope (6, KDLS 25 at 239 against 254), and "I" IGS (10, VHHX 13 at 89 against 137),
+/// beside "0" (269 localizers), "1"/"2"/"3", and two blank codes at EGFF that both have a
+/// glideslope. The MSFS 2020 build has no such codes (its "U" covers LDA and IGS alike), so
+/// there they still read as ILS or Localizer. The glideslope is still read from the data and
+/// said once, at the end: an LDA, which may or may not have one, says ", with glideslope" (or
+/// the angle, when it is not 3.0), and an IGS, which normally has one, says ", no glideslope"
+/// when it has none.</para>
+///
 /// <para>The words carry no redundancy, as agreed with the owner (2026-11-01): "ILS" already
 /// means a glideslope and "Localizer" means none, so neither says "glideslope" or "no
 /// glideslope". The glideslope ANGLE is said only when it is not 3.0 degrees, which is 483 of
@@ -39,6 +52,15 @@ public static class LandingAidText
         _ => null
     };
 
+    /// <summary>"LDA" for navdatareader's type codes "A" and "L", "IGS" for "I": the offset
+    /// facilities, whose course is not the runway's. Null for every other code.</summary>
+    public static string? OffsetFacility(string? ilsType) => ilsType?.Trim() switch
+    {
+        "A" or "L" => "LDA",
+        "I" => "IGS",
+        _ => null
+    };
+
     /// <summary>Magnetic course from the localizer's true heading and the magnetic variation
     /// (east positive, as navdata stores it), as a whole degree from 1 to 360.
     /// <para>⚠️ Pass the LOCALIZER's own variation (`ils.mag_var`), and the airport's only when
@@ -55,8 +77,10 @@ public static class LandingAidText
     /// <summary>
     /// "Localizer 108.70, course 152", "ILS 110.10, course 171", "ILS CAT III 110.30, course
     /// 270", or with a glideslope that is not 3.0 degrees "ILS 110.10, course 90, glideslope
-    /// 5.5 degrees". An unknown angle (0) is not said. Every number reads with a dot whatever
-    /// the Windows number format.
+    /// 5.5 degrees". An offset approach names its facility: "LDA 111.35, course 147", "LDA
+    /// 109.35, course 239, with glideslope" (or "…, glideslope 4.2 degrees"), "IGS 111.90,
+    /// course 89", "IGS …, no glideslope". An unknown angle (0) is not said. Every number reads
+    /// with a dot whatever the Windows number format.
     /// </summary>
     public static string Describe(bool hasGlideslope, string? ilsType, double frequencyMhz,
         int magneticCourse, double glideslopePitch)
@@ -65,16 +89,27 @@ public static class LandingAidText
         string freq = Math.Round(frequencyMhz, 2, MidpointRounding.AwayFromZero).ToString("0.00", inv);
         string course = magneticCourse.ToString(inv);
 
-        if (!hasGlideslope)
+        string? offsetFacility = OffsetFacility(ilsType);
+        string name;
+        if (offsetFacility != null)
+            name = offsetFacility;
+        else if (!hasGlideslope)
             return $"Localizer {freq}, course {course}";
+        else
+        {
+            string? category = Category(ilsType);
+            name = category == null ? "ILS" : $"ILS {category}";
+        }
 
-        string? category = Category(ilsType);
-        string name = category == null ? "ILS" : $"ILS {category}";
         string text = $"{name} {freq}, course {course}";
 
         double angle = Math.Round(glideslopePitch, 1, MidpointRounding.AwayFromZero);
-        if (angle > 0 && angle != StandardGlideslopeDeg)
+        if (hasGlideslope && angle > 0 && angle != StandardGlideslopeDeg)
             text += $", glideslope {angle.ToString("0.0", inv)} degrees";
+        else if (offsetFacility == "LDA" && hasGlideslope)
+            text += ", with glideslope";
+        else if (offsetFacility == "IGS" && !hasGlideslope)
+            text += ", no glideslope";
         return text;
     }
 

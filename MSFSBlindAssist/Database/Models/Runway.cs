@@ -23,7 +23,9 @@ public class Runway
         public bool ILSHasGlideslope { get; set; }
 
         /// <summary>navdatareader's `ils.type` code ("1"/"2"/"3" = CAT I/II/III, "0" = no
-        /// glideslope, "U" = uncategorised); see <see cref="LandingAidText.Category"/>.</summary>
+        /// glideslope, "U" = uncategorised, and in an MSFS 2024 build "A"/"L" = LDA
+        /// without/with glideslope, "I" = IGS); see <see cref="LandingAidText.Category"/> and
+        /// <see cref="LandingAidText.OffsetFacility"/>.</summary>
         public string ILSType { get; set; } = string.Empty;
 
         /// <summary>The localizer's magnetic course, 1-360; 0 while there is no localizer.</summary>

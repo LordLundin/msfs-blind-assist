@@ -71,13 +71,35 @@ public class LandingAidTextTests
             LandingAidText.Describe(true, "3", 110.30, 270, 3.5));
 
     [Theory]
-    [InlineData("U")]   // navdatareader's uncategorised ILS/IGS/LDA-with-glideslope
+    [InlineData("U")]   // MSFS 2020 navdatareader's uncategorised ILS/IGS/LDA-with-glideslope
     [InlineData("ILS")]
     [InlineData("")]
     [InlineData(null)]
     public void An_uncategorised_ILS_with_a_glideslope_is_a_plain_ILS(string? type)
         => Assert.Equal("ILS 109.50, course 45, glideslope 3.5 degrees",
             LandingAidText.Describe(true, type, 109.50, 45, 3.5));
+
+    // An offset approach's course is not the runway's, so it is named for its facility and
+    // never called an ILS or a localizer. Rows from an MSFS 2024 navdatareader 1.2.4 build with
+    // a Navigraph update.
+    [Theory]
+    [InlineData("A", false, 111.35, 147, 0.0, "LDA 111.35, course 147")]                          // KDCA 19, runway 186
+    [InlineData("L", true, 109.35, 239, 4.2, "LDA 109.35, course 239, glideslope 4.2 degrees")]   // KDLS 25, runway 254
+    [InlineData("L", true, 109.35, 239, 3.0, "LDA 109.35, course 239, with glideslope")]
+    [InlineData("I", true, 111.90, 89, 3.1, "IGS 111.90, course 89, glideslope 3.1 degrees")]     // VHHX 13, runway 137
+    [InlineData("I", true, 111.90, 89, 3.0, "IGS 111.90, course 89")]
+    [InlineData("I", false, 111.90, 89, 0.0, "IGS 111.90, course 89, no glideslope")]
+    [InlineData("A", true, 111.35, 147, 3.0, "LDA 111.35, course 147, with glideslope")]          // the data decides, not the code
+    public void An_offset_approach_is_named_for_its_facility(string type, bool hasGlideslope,
+        double frequencyMhz, int course, double pitch, string expected)
+    {
+        string text = LandingAidText.Describe(hasGlideslope, type, frequencyMhz, course, pitch);
+
+        Assert.Equal(expected, text);
+        Assert.DoesNotContain("ILS", text);
+        Assert.DoesNotContain("Localizer", text);
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(text, "LDA|IGS"));
+    }
 
     [Fact]
     public void A_type_0_row_that_is_named_ILS_is_still_a_localizer_by_its_glideslope_data()
@@ -185,6 +207,30 @@ public class LandingAidTextTests
             Assert.EndsWith(" - ILS CAT III 110.90, course 333", runways["34"].ToString());
             Assert.DoesNotContain("ILS", runways["09"].ToString());
             Assert.DoesNotContain("Localizer", runways["09"].ToString());
+        });
+    }
+
+    [Fact]
+    public void The_runway_list_and_the_EFB_page_name_an_LDA()
+    {
+        // KDCA 19's shape: an LDA with no glideslope (type "A"), true 136.0 with a 10.6 degree
+        // west variation, so course 147 on a runway that is 186 magnetic.
+        using var db = new RunwayFixtureDb();
+        db.InsertAirport(1, Icao, Icao, magVar: -10.6);
+        db.InsertRunwayEnd(1, "01", ilsIdent: null, heading: 355.5);
+        db.InsertRunwayEnd(2, "19", ilsIdent: "IVWH", heading: 175.5);
+        db.InsertRunway(1, 1, 1, 2, heading: 355.5);
+        db.InsertIls("IVWH", Icao, "19", locHeading: 136.0, frequency: 111350, type: "A",
+            name: "LDA RW19", magVar: -10.6);
+        db.Seal();
+
+        UnderCulture("de-DE", () =>
+        {
+            var rwy19 = new LittleNavMapProvider(db.DbPath, "FS2024").GetRunways(Icao).Single(r => r.RunwayID == "19");
+            Assert.EndsWith(" - LDA 111.35, course 147", rwy19.ToString());
+
+            string page = ElectronicFlightBagForm.GetRunwayDetailedInfoCore(db.DbPath, "FS2024", Icao, "19");
+            Assert.Contains("LDA 111.35, course 147", page.Split('\n').Select(l => l.Trim()));
         });
     }
 
