@@ -2563,8 +2563,8 @@ public partial class ElectronicFlightBagForm : Form
                         //  3. "No localizer".
                         //
                         // The block opens with LandingAidText's one-line summary ("ILS 110.10,
-                        // course 171, glideslope 3.0 degrees" or "Localizer 108.70, course 157, no
-                        // glideslope"), the same words as the runway description. A localizer with
+                        // course 171" or "Localizer 108.70, course 152"), the same words as the
+                        // runway description. A localizer with
                         // no glideslope is never labelled ILS: ESST's two localizers read as ILS
                         // here while the G1000 rightly offered only LOC approaches.
                         sb.AppendLine("LOCALIZER AND GLIDESLOPE:");

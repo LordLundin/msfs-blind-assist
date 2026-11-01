@@ -17,6 +17,12 @@ namespace MSFSBlindAssist.Database;
 /// still NAMED "ILS RW…"; types "1", "2", "3" and "U" all carry both. The category is said
 /// only when it is II or III: CAT I is 3,253 of the 4,082 ILS and would be noise on every
 /// one, while CAT II/III is what an autoland in fog is planned on.</para>
+///
+/// <para>The words carry no redundancy, as agreed with the owner (2026-11-01): "ILS" already
+/// means a glideslope and "Localizer" means none, so neither says "glideslope" or "no
+/// glideslope". The glideslope ANGLE is said only when it is not 3.0 degrees, which is 483 of
+/// 4,194 glideslopes in an MSFS 2020 build: a steep one (London City and São Paulo 5.5, Sion
+/// 6.0, Lugano 6.65) changes how the approach is flown, while "3.0" on every ILS is noise.</para>
 /// </summary>
 public static class LandingAidText
 {
@@ -47,9 +53,10 @@ public static class LandingAidText
     }
 
     /// <summary>
-    /// "ILS 110.10, course 171, glideslope 3.0 degrees", "ILS CAT III 110.30, course 270,
-    /// glideslope 3.0 degrees" or "Localizer 108.70, course 157, no glideslope". Every number
-    /// reads with a dot whatever the Windows number format.
+    /// "Localizer 108.70, course 152", "ILS 110.10, course 171", "ILS CAT III 110.30, course
+    /// 270", or with a glideslope that is not 3.0 degrees "ILS 110.10, course 90, glideslope
+    /// 5.5 degrees". An unknown angle (0) is not said. Every number reads with a dot whatever
+    /// the Windows number format.
     /// </summary>
     public static string Describe(bool hasGlideslope, string? ilsType, double frequencyMhz,
         int magneticCourse, double glideslopePitch)
@@ -59,15 +66,20 @@ public static class LandingAidText
         string course = magneticCourse.ToString(inv);
 
         if (!hasGlideslope)
-            return $"Localizer {freq}, course {course}, no glideslope";
+            return $"Localizer {freq}, course {course}";
 
         string? category = Category(ilsType);
         string name = category == null ? "ILS" : $"ILS {category}";
-        string gs = glideslopePitch > 0
-            ? $"glideslope {Math.Round(glideslopePitch, 1, MidpointRounding.AwayFromZero).ToString("0.0", inv)} degrees"
-            : "glideslope";
-        return $"{name} {freq}, course {course}, {gs}";
+        string text = $"{name} {freq}, course {course}";
+
+        double angle = Math.Round(glideslopePitch, 1, MidpointRounding.AwayFromZero);
+        if (angle > 0 && angle != StandardGlideslopeDeg)
+            text += $", glideslope {angle.ToString("0.0", inv)} degrees";
+        return text;
     }
+
+    /// <summary>The usual glideslope angle, which is not said.</summary>
+    public const double StandardGlideslopeDeg = 3.0;
 
     /// <summary>What a runway end with no localizer says.</summary>
     public const string NoLocalizer = "No localizer";

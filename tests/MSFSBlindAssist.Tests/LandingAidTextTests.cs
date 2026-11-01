@@ -39,20 +39,36 @@ public class LandingAidTextTests
         string text = LandingAidText.Describe(hasGlideslope: false, ilsType: "0",
             frequencyMhz: 108.70, magneticCourse: 157, glideslopePitch: 0);
 
-        Assert.Equal("Localizer 108.70, course 157, no glideslope", text);
+        // "Localizer" already means no glideslope, so it is not said again.
+        Assert.Equal("Localizer 108.70, course 157", text);
         Assert.DoesNotContain("ILS", text);
+        Assert.DoesNotContain("glideslope", text);
     }
 
     [Fact]
-    public void A_CAT_I_ILS_does_not_say_its_category()
-        => Assert.Equal("ILS 110.10, course 171, glideslope 3.0 degrees",
+    public void A_CAT_I_ILS_does_not_say_its_category_or_a_standard_glideslope()
+        => Assert.Equal("ILS 110.10, course 171",
             LandingAidText.Describe(true, "1", 110.10, 171, 3.0));
 
     [Theory]
-    [InlineData("2", "ILS CAT II 110.30, course 270, glideslope 3.0 degrees")]
-    [InlineData("3", "ILS CAT III 110.30, course 270, glideslope 3.0 degrees")]
+    [InlineData("2", "ILS CAT II 110.30, course 270")]
+    [InlineData("3", "ILS CAT III 110.30, course 270")]
     public void CAT_II_and_III_are_said(string type, string expected)
         => Assert.Equal(expected, LandingAidText.Describe(true, type, 110.30, 270, 3.0));
+
+    [Theory]
+    [InlineData(5.5, "ILS 110.10, course 90, glideslope 5.5 degrees")]      // London City
+    [InlineData(6.65, "ILS 110.10, course 90, glideslope 6.7 degrees")]     // Lugano, halves away from zero
+    [InlineData(3.2, "ILS 110.10, course 90, glideslope 3.2 degrees")]
+    [InlineData(3.04, "ILS 110.10, course 90")]                             // rounds to 3.0: not said
+    [InlineData(0.0, "ILS 110.10, course 90")]                              // unknown angle: not said
+    public void Only_a_glideslope_that_is_not_3_degrees_is_said(double pitch, string expected)
+        => Assert.Equal(expected, LandingAidText.Describe(true, "1", 110.10, 90, pitch));
+
+    [Fact]
+    public void A_CAT_III_with_a_steep_glideslope_says_both()
+        => Assert.Equal("ILS CAT III 110.30, course 270, glideslope 3.5 degrees",
+            LandingAidText.Describe(true, "3", 110.30, 270, 3.5));
 
     [Theory]
     [InlineData("U")]   // navdatareader's uncategorised ILS/IGS/LDA-with-glideslope
@@ -87,9 +103,9 @@ public class LandingAidTextTests
     public void Every_number_reads_with_a_dot_under_a_comma_culture()
         => UnderCulture("sv-SE", () =>
         {
-            Assert.Equal("ILS 110.10, course 171, glideslope 3.0 degrees",
-                LandingAidText.Describe(true, "1", 110.1, 171, 3.0));
-            Assert.Equal("Localizer 108.70, course 157, no glideslope",
+            Assert.Equal("ILS 110.10, course 171, glideslope 5.5 degrees",
+                LandingAidText.Describe(true, "1", 110.1, 171, 5.5));
+            Assert.Equal("Localizer 108.70, course 157",
                 LandingAidText.Describe(false, "0", 108.7, 157, 0));
         });
 
@@ -127,7 +143,7 @@ public class LandingAidTextTests
         {
             string page = ElectronicFlightBagForm.GetRunwayDetailedInfoCore(db.DbPath, "FS2020", Icao, "16");
 
-            Assert.Contains("Localizer 108.70, course 152, no glideslope", page);
+            Assert.Contains("Localizer 108.70, course 152", page.Split('\n').Select(l => l.Trim()));
             Assert.DoesNotContain("ILS Ident", page);
             Assert.DoesNotContain("ILS Frequency", page);
             Assert.DoesNotContain("ILS Type", page);
@@ -141,7 +157,7 @@ public class LandingAidTextTests
         using var db = BuildTwoRunwayAirport();
         string page = ElectronicFlightBagForm.GetRunwayDetailedInfoCore(db.DbPath, "FS2020", Icao, "34");
 
-        Assert.Contains("ILS CAT III 110.90, course 333, glideslope 3.0 degrees", page);
+        Assert.Contains("ILS CAT III 110.90, course 333", page.Split('\n').Select(l => l.Trim()));
     }
 
     [Fact]
@@ -165,8 +181,8 @@ public class LandingAidTextTests
             var runways = new LittleNavMapProvider(db.DbPath, "FS2020").GetRunways(Icao)
                 .ToDictionary(r => r.RunwayID);
 
-            Assert.EndsWith(" - Localizer 108.70, course 152, no glideslope", runways["16"].ToString());
-            Assert.EndsWith(" - ILS CAT III 110.90, course 333, glideslope 3.0 degrees", runways["34"].ToString());
+            Assert.EndsWith(" - Localizer 108.70, course 152", runways["16"].ToString());
+            Assert.EndsWith(" - ILS CAT III 110.90, course 333", runways["34"].ToString());
             Assert.DoesNotContain("ILS", runways["09"].ToString());
             Assert.DoesNotContain("Localizer", runways["09"].ToString());
         });
@@ -193,6 +209,6 @@ public class LandingAidTextTests
         Assert.Equal(109.10, rwy09.ILSFreq, 3);
         Assert.False(rwy09.ILSHasGlideslope);
         Assert.Equal(0.0, rwy09.GlideslopeAngleDeg);
-        Assert.EndsWith(" - Localizer 109.10, course 88, no glideslope", rwy09.ToString());
+        Assert.EndsWith(" - Localizer 109.10, course 88", rwy09.ToString());
     }
 }

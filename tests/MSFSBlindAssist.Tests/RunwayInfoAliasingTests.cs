@@ -162,7 +162,8 @@ public class RunwayInfoAliasingTests
 
             Assert.Contains("Frequency:            108.50 MHz", result);
             // 206.0 true less 5.4 east variation: course 201 magnetic.
-            Assert.Contains("ILS 108.50, course 201, glideslope 3.0 degrees", result);
+            // A 3.0 degree glideslope is not said: the whole line is just this.
+            Assert.Contains("ILS 108.50, course 201", result.Split('\n').Select(l => l.Trim()));
             Assert.Contains("Loc Heading:          206.0° true", result);
             Assert.Contains("Loc Width:            3.4°", result);
             Assert.Contains("DME Altitude:         506 ft", result);
@@ -196,7 +197,7 @@ public class RunwayInfoAliasingTests
         {
             string result = ElectronicFlightBagForm.GetRunwayDetailedInfoCore(fixture.DbPath, "FS2024", Icao, "09L");
 
-            Assert.Contains("ILS 110.30, course 90, glideslope 3.0 degrees", result);
+            Assert.Contains("ILS 110.30, course 90", result.Split('\n').Select(l => l.Trim()));
             Assert.Contains("Ident:                ITST", result);
             Assert.Contains("Frequency:            110.30 MHz", result);
             Assert.Contains("Loc Heading:          90.0° true", result);
