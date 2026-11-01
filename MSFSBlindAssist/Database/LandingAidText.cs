@@ -1,0 +1,69 @@
+using System.Globalization;
+
+namespace MSFSBlindAssist.Database;
+
+/// <summary>
+/// Names a runway end's radio landing aid the one way the app says it everywhere: the EFB
+/// runway page and the runway description (<see cref="Models.Runway.ToString"/>).
+///
+/// <para>A runway end has at most one localizer. With a glideslope it is an ILS, without one
+/// it is a localizer only, and the two must never sound alike: at ESST (Torsby) both ends have
+/// a localizer and no glideslope, and the EFB headed them "ILS INFORMATION" with "ILS Ident"
+/// and "ILS Frequency" rows, so a pilot planned an ILS the G1000 rightly never offered.</para>
+///
+/// <para>Whether there is a glideslope is read from the glideslope data, never from the
+/// facility's name or its type code alone. In an MSFS 2020 navdatareader build every `ils` row
+/// of type "0" (321 of 4,515) has a NULL <c>gs_range</c> and <c>gs_pitch</c>, and 16 of them are
+/// still NAMED "ILS RW…"; types "1", "2", "3" and "U" all carry both. The category is said
+/// only when it is II or III: CAT I is 3,253 of the 4,082 ILS and would be noise on every
+/// one, while CAT II/III is what an autoland in fog is planned on.</para>
+/// </summary>
+public static class LandingAidText
+{
+    /// <summary>A glideslope exists when the row carries a glideslope range or angle.</summary>
+    public static bool HasGlideslope(double? gsRange, double? gsPitch)
+        => (gsRange ?? 0) > 0 || (gsPitch ?? 0) > 0;
+
+    /// <summary>"CAT II" or "CAT III" for navdatareader's type codes "2" and "3"; null for
+    /// every other code (CAT I, localizer-only, unknown), which is not said.</summary>
+    public static string? Category(string? ilsType) => ilsType?.Trim() switch
+    {
+        "2" => "CAT II",
+        "3" => "CAT III",
+        _ => null
+    };
+
+    /// <summary>Magnetic course from the localizer's true heading and the magnetic variation
+    /// (east positive, as navdata stores it), as a whole degree from 1 to 360.</summary>
+    public static int MagneticCourse(double locHeadingTrue, double magVar)
+    {
+        int rounded = (int)Math.Round(locHeadingTrue - magVar, MidpointRounding.AwayFromZero);
+        return ((rounded % 360) + 360 - 1) % 360 + 1;
+    }
+
+    /// <summary>
+    /// "ILS 110.10, course 171, glideslope 3.0 degrees", "ILS CAT III 110.30, course 270,
+    /// glideslope 3.0 degrees" or "Localizer 108.70, course 157, no glideslope". Every number
+    /// reads with a dot whatever the Windows number format.
+    /// </summary>
+    public static string Describe(bool hasGlideslope, string? ilsType, double frequencyMhz,
+        int magneticCourse, double glideslopePitch)
+    {
+        var inv = CultureInfo.InvariantCulture;
+        string freq = Math.Round(frequencyMhz, 2, MidpointRounding.AwayFromZero).ToString("0.00", inv);
+        string course = magneticCourse.ToString(inv);
+
+        if (!hasGlideslope)
+            return $"Localizer {freq}, course {course}, no glideslope";
+
+        string? category = Category(ilsType);
+        string name = category == null ? "ILS" : $"ILS {category}";
+        string gs = glideslopePitch > 0
+            ? $"glideslope {Math.Round(glideslopePitch, 1, MidpointRounding.AwayFromZero).ToString("0.0", inv)} degrees"
+            : "glideslope";
+        return $"{name} {freq}, course {course}, {gs}";
+    }
+
+    /// <summary>What a runway end with no localizer says.</summary>
+    public const string NoLocalizer = "No localizer";
+}

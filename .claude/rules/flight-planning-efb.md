@@ -14,6 +14,8 @@ paths:
   - "tests/MSFSBlindAssist.Tests/**/*NavDataFixture*.cs"
   - "MSFSBlindAssist/Database/LittleNavMapProvider.cs"
   - "MSFSBlindAssist/Database/IAirportDataProvider.cs"
+  - "MSFSBlindAssist/Database/LandingAidText.cs"
+  - "tests/MSFSBlindAssist.Tests/**/*LandingAid*.cs"
   - "MSFSBlindAssist/Database/AirportNameSearch.cs"
   - "MSFSBlindAssist/Forms/AirportSearchResultsForm.cs"
   - "tests/MSFSBlindAssist.Tests/**/*AirportNameSearch*.cs"

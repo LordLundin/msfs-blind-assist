@@ -145,9 +145,13 @@ public class LittleNavMapProvider : IAirportDataProvider, IAirportFacilitiesProv
                     ils_primary.frequency as primary_ils_freq,
                     ils_primary.loc_heading as primary_ils_heading,
                     ils_primary.gs_pitch as primary_ils_gs_pitch,
+                    ils_primary.gs_range as primary_ils_gs_range,
+                    ils_primary.type as primary_ils_type,
                     ils_secondary.frequency as secondary_ils_freq,
                     ils_secondary.loc_heading as secondary_ils_heading,
-                    ils_secondary.gs_pitch as secondary_ils_gs_pitch
+                    ils_secondary.gs_pitch as secondary_ils_gs_pitch,
+                    ils_secondary.gs_range as secondary_ils_gs_range,
+                    ils_secondary.type as secondary_ils_type
                 FROM runway r
                 JOIN runway_end re_primary ON r.primary_end_id = re_primary.runway_end_id
                 JOIN runway_end re_secondary ON r.secondary_end_id = re_secondary.runway_end_id
@@ -222,7 +226,7 @@ public class LittleNavMapProvider : IAirportDataProvider, IAirportFacilitiesProv
     {
         // Fast path: direct join via loc_airport_ident + loc_runway_name. Works
         // for fs2020 (every ILS row populated) and the majority of fs2024 rows.
-        var sql = @"SELECT ident, frequency, range, gs_range, gs_pitch, loc_heading, loc_width,
+        var sql = @"SELECT ident, type, frequency, range, gs_range, gs_pitch, loc_heading, loc_width,
                           lonx, laty, altitude, gs_lonx, gs_laty, gs_altitude
                    FROM ils
                    WHERE UPPER(loc_airport_ident) = UPPER(@ICAO)
@@ -391,7 +395,7 @@ public class LittleNavMapProvider : IAirportDataProvider, IAirportFacilitiesProv
             var candidates = new List<ILSData>();
 
             using var cmd = new SqliteCommand(@"
-                SELECT ident, frequency, range, gs_range, gs_pitch, loc_heading, loc_width,
+                SELECT ident, type, frequency, range, gs_range, gs_pitch, loc_heading, loc_width,
                        lonx, laty, altitude, gs_lonx, gs_laty, gs_altitude
                 FROM ils
                 WHERE (loc_airport_ident IS NULL OR loc_airport_ident = '')
@@ -426,7 +430,11 @@ public class LittleNavMapProvider : IAirportDataProvider, IAirportFacilitiesProv
             AntennaAltitude = Convert.ToInt32(reader["altitude"] ?? 0),
             GlideslopeLatitude = reader["gs_laty"] != DBNull.Value ? Convert.ToDouble(reader["gs_laty"]) : null,
             GlideslopeLongitude = reader["gs_lonx"] != DBNull.Value ? Convert.ToDouble(reader["gs_lonx"]) : null,
-            GlideslopeAltitude = reader["gs_altitude"] != DBNull.Value ? Convert.ToInt32(reader["gs_altitude"]) : null
+            GlideslopeAltitude = reader["gs_altitude"] != DBNull.Value ? Convert.ToInt32(reader["gs_altitude"]) : null,
+            // From the RAW columns: GlideslopePitch above defaults a NULL to 3.0.
+            HasGlideslope = LandingAidText.HasGlideslope(
+                SafeReadDouble(reader, "gs_range", 0.0), SafeReadDouble(reader, "gs_pitch", 0.0)),
+            Type = SafeReadText(reader, "type")
         };
     }
 
@@ -843,6 +851,9 @@ public class LittleNavMapProvider : IAirportDataProvider, IAirportFacilitiesProv
         double ilsFreq = SafeReadDouble(reader, $"{prefix}_ils_freq", 0.0) / 1000.0;
         double ilsHeading = SafeReadDouble(reader, $"{prefix}_ils_heading", 0.0);
         double ilsGsPitch = SafeReadDouble(reader, $"{prefix}_ils_gs_pitch", 0.0);  // Published glideslope angle (deg); 0 = unknown, caller falls back to 3°
+        bool ilsHasGs = LandingAidText.HasGlideslope(
+            SafeReadDouble(reader, $"{prefix}_ils_gs_range", 0.0), ilsGsPitch);
+        string ilsType = SafeReadText(reader, $"{prefix}_ils_type");
 
         if (ilsFreq <= 0.0)
         {
@@ -863,7 +874,11 @@ public class LittleNavMapProvider : IAirportDataProvider, IAirportFacilitiesProv
             {
                 ilsFreq = fallback.Frequency;
                 ilsHeading = fallback.LocalizerHeading;
-                ilsGsPitch = fallback.GlideslopePitch;
+                // ReadILSFromReader defaults a NULL gs_pitch to 3.0 for the guidance; a
+                // localizer-only runway keeps 0 here, as the joined path gives it.
+                ilsGsPitch = fallback.HasGlideslope ? fallback.GlideslopePitch : 0.0;
+                ilsHasGs = fallback.HasGlideslope;
+                ilsType = fallback.Type;
                 ilsIdent = fallback.Ident;
             }
         }
@@ -889,6 +904,9 @@ public class LittleNavMapProvider : IAirportDataProvider, IAirportFacilitiesProv
             Surface = MapSurfaceType(reader["surface"]?.ToString()),
             ILSFreq = ilsFreq,
             ILSHeading = ilsHeading,
+            ILSHasGlideslope = ilsFreq > 0.0 && ilsHasGs,
+            ILSType = ilsFreq > 0.0 ? ilsType : string.Empty,
+            ILSCourseMag = ilsFreq > 0.0 ? LandingAidText.MagneticCourse(ilsHeading, magVar) : 0,
             ThresholdOffset = thresholdOffset,
             ThresholdElevation = altitude,
             GlideslopeAngleDeg = ilsGsPitch,
@@ -950,6 +968,21 @@ public class LittleNavMapProvider : IAirportDataProvider, IAirportFacilitiesProv
     /// throws, so the bare <c>?? 0</c> pattern is unsafe for nullable columns like
     /// <c>ils.gs_range</c> (NULL on localizer-only approaches).
     /// </summary>
+    /// <summary>A text column as a trimmed string; "" when absent or NULL.</summary>
+    private static string SafeReadText(SqliteDataReader reader, string columnName)
+    {
+        try
+        {
+            int ord = reader.GetOrdinal(columnName);
+            if (reader.IsDBNull(ord)) return string.Empty;
+            return Convert.ToString(reader.GetValue(ord), System.Globalization.CultureInfo.InvariantCulture)?.Trim() ?? string.Empty;
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
     private static int SafeReadInt(SqliteDataReader reader, string columnName, int defaultValue)
     {
         try

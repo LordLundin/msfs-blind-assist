@@ -1,0 +1,190 @@
+// Characterization tests for LandingAidText, the one rule that names a runway end's radio
+// landing aid, and for the two places that speak it: the EFB runway page
+// (ElectronicFlightBagForm.GetRunwayDetailedInfoCore) and the runway description
+// (Runway.ToString, through LittleNavMapProvider.GetRunways).
+//
+// The reported defect: ESST 16 and 34 have a localizer and no glideslope (navdatareader type
+// "0", gs_range and gs_pitch NULL), and the EFB headed them "ILS INFORMATION" with "ILS
+// Ident" and "ILS Frequency" rows, so a pilot planned an ILS that does not exist.
+
+using System.Globalization;
+using MSFSBlindAssist.Database;
+using MSFSBlindAssist.Forms;
+
+namespace MSFSBlindAssist.Tests;
+
+public class LandingAidTextTests
+{
+    private const string Icao = "KTST";
+
+    private static void UnderCulture(string cultureName, Action assertions)
+    {
+        var previous = CultureInfo.CurrentCulture;
+        try
+        {
+            CultureInfo.CurrentCulture = new CultureInfo(cultureName);
+            assertions();
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = previous;
+        }
+    }
+
+    // ---- The rule itself ----------------------------------------------------------------
+
+    [Fact]
+    public void A_localizer_with_no_glideslope_is_never_called_an_ILS()
+    {
+        string text = LandingAidText.Describe(hasGlideslope: false, ilsType: "0",
+            frequencyMhz: 108.70, magneticCourse: 157, glideslopePitch: 0);
+
+        Assert.Equal("Localizer 108.70, course 157, no glideslope", text);
+        Assert.DoesNotContain("ILS", text);
+    }
+
+    [Fact]
+    public void A_CAT_I_ILS_does_not_say_its_category()
+        => Assert.Equal("ILS 110.10, course 171, glideslope 3.0 degrees",
+            LandingAidText.Describe(true, "1", 110.10, 171, 3.0));
+
+    [Theory]
+    [InlineData("2", "ILS CAT II 110.30, course 270, glideslope 3.0 degrees")]
+    [InlineData("3", "ILS CAT III 110.30, course 270, glideslope 3.0 degrees")]
+    public void CAT_II_and_III_are_said(string type, string expected)
+        => Assert.Equal(expected, LandingAidText.Describe(true, type, 110.30, 270, 3.0));
+
+    [Theory]
+    [InlineData("U")]   // navdatareader's uncategorised ILS/IGS/LDA-with-glideslope
+    [InlineData("ILS")]
+    [InlineData("")]
+    [InlineData(null)]
+    public void An_uncategorised_ILS_with_a_glideslope_is_a_plain_ILS(string? type)
+        => Assert.Equal("ILS 109.50, course 45, glideslope 3.5 degrees",
+            LandingAidText.Describe(true, type, 109.50, 45, 3.5));
+
+    [Fact]
+    public void A_type_0_row_that_is_named_ILS_is_still_a_localizer_by_its_glideslope_data()
+    {
+        // 16 of the 321 type "0" rows in an MSFS 2020 build are NAMED "ILS RW…"; the data
+        // decides, never the name.
+        Assert.False(LandingAidText.HasGlideslope(null, null));
+        Assert.False(LandingAidText.HasGlideslope(0, 0));
+        Assert.True(LandingAidText.HasGlideslope(10, null));
+        Assert.True(LandingAidText.HasGlideslope(null, 3.0));
+    }
+
+    [Theory]
+    [InlineData(176.68, 5.7, 171)]
+    [InlineData(2.0, 5.0, 357)]     // wraps below north
+    [InlineData(358.0, -5.0, 3)]    // wraps past north, west variation
+    [InlineData(5.4, 5.4, 360)]     // due north is 360, never 0
+    [InlineData(90.5, 0.0, 91)]     // halves round away from zero
+    public void The_course_is_magnetic_from_1_to_360(double trueHeading, double magVar, int expected)
+        => Assert.Equal(expected, LandingAidText.MagneticCourse(trueHeading, magVar));
+
+    [Fact]
+    public void Every_number_reads_with_a_dot_under_a_comma_culture()
+        => UnderCulture("sv-SE", () =>
+        {
+            Assert.Equal("ILS 110.10, course 171, glideslope 3.0 degrees",
+                LandingAidText.Describe(true, "1", 110.1, 171, 3.0));
+            Assert.Equal("Localizer 108.70, course 157, no glideslope",
+                LandingAidText.Describe(false, "0", 108.7, 157, 0));
+        });
+
+    // ---- The EFB runway page ------------------------------------------------------------
+
+    private static RunwayFixtureDb BuildTwoRunwayAirport()
+    {
+        // 16 has a localizer only (ESST's shape); 34 has a CAT III ILS; 09/27 has neither.
+        var db = new RunwayFixtureDb();
+        db.InsertAirport(1, Icao, Icao, magVar: 5.0);
+        db.InsertRunwayEnd(1, "16", ilsIdent: "NST", heading: 157.7);
+        db.InsertRunwayEnd(2, "34", ilsIdent: "IST", heading: 337.7);
+        db.InsertRunway(1, 1, 1, 2, heading: 157.7);
+        db.InsertRunwayEnd(3, "09", ilsIdent: null, heading: 90.0, lonx: 1.0, laty: 1.0);
+        db.InsertRunwayEnd(4, "27", ilsIdent: null, heading: 270.0, lonx: 1.01, laty: 1.0);
+        db.InsertRunway(2, 1, 3, 4, heading: 90.0, lonx: 1.0, laty: 1.0);
+        db.InsertLocalizerOnly("NST", Icao, "16", locHeading: 157.7, frequency: 108700, name: "ILS RW16");
+        db.InsertIls("IST", Icao, "34", locHeading: 337.7, frequency: 110900,
+            gsPitch: 3.0, gsRange: 10, type: "3");
+        db.Seal();
+        return db;
+    }
+
+    [Fact]
+    public void The_EFB_page_calls_a_localizer_only_runway_a_localizer()
+    {
+        using var db = BuildTwoRunwayAirport();
+        UnderCulture("de-DE", () =>
+        {
+            string page = ElectronicFlightBagForm.GetRunwayDetailedInfoCore(db.DbPath, "FS2020", Icao, "16");
+
+            Assert.Contains("Localizer 108.70, course 153, no glideslope", page);
+            Assert.DoesNotContain("ILS Ident", page);
+            Assert.DoesNotContain("ILS Frequency", page);
+            Assert.DoesNotContain("ILS Type", page);
+            Assert.DoesNotContain("ILS INFORMATION", page);
+        });
+    }
+
+    [Fact]
+    public void The_EFB_page_names_a_CAT_III_ILS()
+    {
+        using var db = BuildTwoRunwayAirport();
+        string page = ElectronicFlightBagForm.GetRunwayDetailedInfoCore(db.DbPath, "FS2020", Icao, "34");
+
+        Assert.Contains("ILS CAT III 110.90, course 333, glideslope 3.0 degrees", page);
+    }
+
+    [Fact]
+    public void The_EFB_page_says_no_localizer()
+    {
+        using var db = BuildTwoRunwayAirport();
+        string page = ElectronicFlightBagForm.GetRunwayDetailedInfoCore(db.DbPath, "FS2020", Icao, "09");
+
+        Assert.Contains("  No localizer", page);
+        Assert.DoesNotContain("No ILS available", page);
+    }
+
+    // ---- The runway description ---------------------------------------------------------
+
+    [Fact]
+    public void The_runway_description_uses_the_same_words()
+    {
+        using var db = BuildTwoRunwayAirport();
+        UnderCulture("sv-SE", () =>
+        {
+            var runways = new LittleNavMapProvider(db.DbPath, "FS2020").GetRunways(Icao)
+                .ToDictionary(r => r.RunwayID);
+
+            Assert.EndsWith(" - Localizer 108.70, course 153, no glideslope", runways["16"].ToString());
+            Assert.EndsWith(" - ILS CAT III 110.90, course 333, glideslope 3.0 degrees", runways["34"].ToString());
+            Assert.DoesNotContain("ILS", runways["09"].ToString());
+            Assert.DoesNotContain("Localizer", runways["09"].ToString());
+        });
+    }
+
+    [Fact]
+    public void A_recovered_localizer_only_orphan_keeps_no_glideslope_angle()
+    {
+        // fs2024 orphan (join columns NULL) recovered by OrphanIlsLookup: ReadILSFromReader
+        // defaults its NULL gs_pitch to 3.0 for the ILS guidance, which must not make the
+        // runway an ILS or give it a glideslope angle.
+        using var db = new RunwayFixtureDb();
+        db.InsertAirport(1, Icao, Icao, lonx: 0.0, laty: 0.0);
+        db.InsertRunwayEnd(101, "09", ilsIdent: "", heading: 90.0, lonx: 0.0, laty: 0.0);
+        db.InsertRunwayEnd(102, "27", ilsIdent: "", heading: 270.0, lonx: 0.0323, laty: 0.0);
+        db.InsertRunway(1, 1, 101, 102, heading: 90.0);
+        db.InsertLocalizerOnly("ILOC", null, null, locHeading: 90.0, frequency: 109100, lonx: 0.0323, laty: 0.0);
+        db.Seal();
+
+        var rwy09 = new LittleNavMapProvider(db.DbPath, "FS2024").GetRunways(Icao).Single(r => r.RunwayID == "09");
+
+        Assert.Equal(109.10, rwy09.ILSFreq, 3);
+        Assert.False(rwy09.ILSHasGlideslope);
+        Assert.Equal(0.0, rwy09.GlideslopeAngleDeg);
+        Assert.EndsWith(" - Localizer 109.10, course 90, no glideslope", rwy09.ToString());
+    }
+}

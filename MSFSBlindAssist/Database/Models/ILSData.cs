@@ -62,6 +62,16 @@ namespace MSFSBlindAssist.Database.Models
         public double? GlideslopeLatitude { get; set; }
 
         /// <summary>
+        /// Whether the row carries a glideslope (an ILS) or not (a localizer only), read from
+        /// the raw gs_range/gs_pitch: <see cref="GlideslopePitch"/> defaults to 3.0 on a
+        /// localizer-only row, so it cannot tell the two apart.
+        /// </summary>
+        public bool HasGlideslope { get; set; }
+
+        /// <summary>navdatareader's `ils.type` code; see LandingAidText.Category.</summary>
+        public string Type { get; set; } = string.Empty;
+
+        /// <summary>
         /// Glideslope antenna longitude in degrees (nullable if not available)
         /// </summary>
         public double? GlideslopeLongitude { get; set; }
