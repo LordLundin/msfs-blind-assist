@@ -23,6 +23,7 @@ public class FirstOfficerWindowsTests
         ["HS_787"] = null,
         ["COWS_DA40NG"] = "DA40-NG First Officer",
         ["COWS_DA40XLS"] = "DA40-XLS First Officer",
+        ["BBS_757"] = "BlueBird 757 First Officer",
     };
 
     [Theory]
