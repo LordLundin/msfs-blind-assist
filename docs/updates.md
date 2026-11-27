@@ -100,6 +100,17 @@ layout, or a file does not load in that build, so no ZIP ships without its layou
 no `layouts` branch, and fails saying `layouts` was not found: that error means the secret is
 missing.
 
+A fork has no `LAYOUTS_DEPLOY_KEY`, so with the secret empty both workflows skip that checkout and
+run `tools/fork-layouts.sh` instead: it takes the `layouts` folder from the parent repository's
+newest published ZIP (the rolling preview while one stands, else the latest release) into the same
+`layout-store` folder, and the bundle step checks it as it checks the store. A repository with
+neither the key nor a parent fails the run.
+
+Both workflows build with `-p:UpdateRepository=${{ github.repository }}`, which the csproj writes
+into the `UpdateRepository` assembly metadata; `UpdateService.Repository` reads it, so a build checks
+for updates in the repository that published it and a fork's build never offers the parent's
+releases. A local build carries none and checks `UpdateService.DefaultRepository`.
+
 Five things there are load-bearing:
 
 - **The preview tag must never start with `v`.** `release.yml` triggers on `tags: ['v*']`

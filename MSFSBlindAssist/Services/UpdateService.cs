@@ -9,8 +9,22 @@ public class UpdateService
     // pre-release, so it cannot serve the preview channel; the list returns both kinds in
     // one call and the selector decides. 30 is GitHub's default page size and far more
     // than this repository will ever need — there is exactly one rolling preview.
-    private const string GITHUB_API_URL =
-        "https://api.github.com/repos/oasis1701/msfs-blind-assist/releases?per_page=30";
+    // The repository is the one the build was published from (the UpdateRepository assembly
+    // metadata, set by release.yml and preview.yml from github.repository), so a fork's build
+    // checks the fork. A local build carries none and checks DefaultRepository.
+    internal const string DefaultRepository = "oasis1701/msfs-blind-assist";
+
+    internal static string ReleasesApiUrl(string repository) =>
+        $"https://api.github.com/repos/{repository}/releases?per_page=30";
+
+    internal static string Repository =>
+        typeof(UpdateService).Assembly
+            .GetCustomAttributes(typeof(System.Reflection.AssemblyMetadataAttribute), false)
+            .OfType<System.Reflection.AssemblyMetadataAttribute>()
+            .FirstOrDefault(a => a.Key == "UpdateRepository" && !string.IsNullOrWhiteSpace(a.Value))
+            ?.Value ?? DefaultRepository;
+
+    private static readonly string GITHUB_API_URL = ReleasesApiUrl(Repository);
     private readonly HttpClient httpClient;
 
     public event EventHandler<UpdateProgressEventArgs>? ProgressChanged;

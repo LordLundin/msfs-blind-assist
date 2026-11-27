@@ -11,6 +11,9 @@ permissions:
 jobs:
   build-and-release:
     runs-on: windows-latest
+    env:
+      # Whether this repository can read the layouts store; a fork cannot (see the layouts steps).
+      HAS_LAYOUTS_KEY: ${{ secrets.LAYOUTS_DEPLOY_KEY != '' }}
 
     steps:
       - name: Checkout
@@ -41,7 +44,7 @@ jobs:
       # the app's update check compares its own AssemblyVersion against the
       # latest GitHub tag, so a 0.0.0 release would offer itself as an update.
       - name: Build
-        run: dotnet build MSFSBlindAssist.sln -c Release -p:Version=${{ steps.version.outputs.VERSION }}
+        run: dotnet build MSFSBlindAssist.sln -c Release -p:Version=${{ steps.version.outputs.VERSION }} -p:UpdateRepository=${{ github.repository }}
 
       # The one-page user guide ships next to the exe, where Help, User Guide opens it
       # (GUIDE-3). A guide problem only warns: the zip then falls back to the online guide.
@@ -68,6 +71,7 @@ jobs:
       # them beside the exe and fails the run when any does not load in this build, or a
       # module has none (UPD-10).
       - name: Fetch the display layouts
+        if: env.HAS_LAYOUTS_KEY == 'true'
         uses: actions/checkout@v5
         with:
           repository: ${{ secrets.LAYOUTS_REPO }}
@@ -76,12 +80,24 @@ jobs:
           path: layout-store
           persist-credentials: false
 
+      # A fork has no deploy key for the layouts store: it takes the layouts folder from its
+      # parent's newest published ZIP (the rolling preview while one exists, else the latest
+      # release), and the bundle step below checks every file loads in this build, as above.
+      - name: Fetch the display layouts from the parent's release
+        if: env.HAS_LAYOUTS_KEY != 'true'
+        run: bash tools/fork-layouts.sh layout-store
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+
       - name: Bundle the display layouts
         run: dotnet run --project tools/LayoutBundle/LayoutBundle.csproj -c Release --property:Platform=x64 -- layout-store MSFSBlindAssist\bin\x64\Release\net10.0-windows\layouts
         shell: pwsh
 
       - name: Create release zip
         run: |
+          # A fork ships its notice beside the exe (FORK-NOTICE.md exists only in a fork's branch).
+          if (Test-Path FORK-NOTICE.md) { Copy-Item FORK-NOTICE.md "MSFSBlindAssist\bin\x64\Release\net10.0-windows\Unofficial fork - read me.txt" }
           Compress-Archive -Path MSFSBlindAssist\bin\x64\Release\net10.0-windows\* -DestinationPath MSFSBA.zip
         shell: pwsh
 
@@ -120,6 +136,11 @@ jobs:
           # script never fails the release — an unresolvable PR renders unattributed.
           bash tools/changelog-contributors.sh fragments.txt contributors.txt
           dotnet run --project tools/ChangelogBuilder -- --out release-notes.md --from-file fragments.txt --contributors contributors.txt
+          # A fork's notes open with its notice (FORK-NOTICE.md exists only in a fork's branch).
+          if [ -f FORK-NOTICE.md ]; then
+            { cat FORK-NOTICE.md; echo; echo '---'; echo; cat release-notes.md; } > release-notes.tmp
+            mv release-notes.tmp release-notes.md
+          fi
           echo "--- release notes ---"
           cat release-notes.md
         env:

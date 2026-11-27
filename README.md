@@ -1,4 +1,8 @@
 # MSFS Blind Assist
+
+> **This is an unofficial fork.** It is LordLundin's personal build of MSFS Blind Assist, not the official app, and the MSFS Blind Assist developers do not support it. Its builds are on [this fork's Releases page](https://github.com/LordLundin/msfs-blind-assist/releases). Report a problem with it in [this fork's Issues](https://github.com/LordLundin/msfs-blind-assist/issues), never to the official developers, unless you have reproduced it in the official release. Donations go to the original developers. Read the full [fork notice](FORK-NOTICE.md) before you use it.
+>
+> Everything below this box is the official project's README, unchanged.
 ![Platform: Windows](https://img.shields.io/badge/platform-Windows-blue.svg)
 [![.NET 10](https://img.shields.io/badge/.NET-10-512BD4.svg)](https://dotnet.microsoft.com/download/dotnet/10.0)
 ![GitHub Downloads](https://img.shields.io/github/downloads/oasis1701/msfs-blind-assist/total.svg)

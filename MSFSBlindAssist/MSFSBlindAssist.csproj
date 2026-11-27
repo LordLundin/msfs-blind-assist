@@ -83,6 +83,14 @@
     <DefineConstants>TRACE</DefineConstants>
   </PropertyGroup>
 
+  <!-- The GitHub repository (owner/name) whose releases the update check reads. release.yml and
+       preview.yml pass -p:UpdateRepository=${{ github.repository }}, so a build checks the repository
+       that published it, and a fork's build never offers the parent's releases. A local build passes
+       none and UpdateService falls back to its default. -->
+  <ItemGroup Condition="'$(UpdateRepository)' != ''">
+    <AssemblyMetadata Include="UpdateRepository" Value="$(UpdateRepository)" />
+  </ItemGroup>
+
   <ItemGroup>
     <!-- External SDK Reference -->
     <Reference Include="Microsoft.FlightSimulator.SimConnect">
