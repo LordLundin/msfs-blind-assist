@@ -15,7 +15,9 @@ using MSFSBlindAssist.Settings;
 // entered with no hold short, route changes while following the tone, and so on.
 //
 //   dotnet run --project tools/VirtualPilot -p:Platform=x64 -c Release -- <mode> [options]
-//     mode: landings | taxi | all | wrongturn | departures | traffic | turnpicks | fetchosm
+//     mode: landings | taxi | all | wrongturn | departures | traffic | turnpicks | fetchosm | approach
+//     approach mode (visual guidance): --selftest, --scenario NAME, --trace NAME,
+//           --capture-gain K, --vertical name=value[,name=value...]
 //     --airports N          busiest N airports by taxi-path count (default 100)
 //     --icao A,B,C          explicit airport list (overrides --airports)
 //     --shard i/n           run only airports i, i+n, i+2n … (for parallel processes)
@@ -45,6 +47,11 @@ if (Environment.GetEnvironmentVariable("VP_LEGACY_TURNSIDE") == "1") TaxiGuidanc
 var logSink = new List<string>();
 bool captureLog = false;
 MSFSBlindAssist.Utils.Logging.Log.Redirect = (file, msg) => { if (captureLog) logSink.Add($"[{file}] {msg}"); };
+#if !MAINAPP
+// Approaches fly two synthetic runways, so they run before the navdata check; the approach
+// runner handles --trace itself.
+if (opt.Mode == "approach") return VirtualPilot.Approach.ApproachRunner.Run(opt);
+#endif
 
 // The navdata flown: the pilot's own database for one simulator, found where the app finds it.
 // A before/after pair only compares when both runs fly the SAME database, so the choice is printed
@@ -1857,6 +1864,9 @@ sealed class Options
 {
     public string Mode = "all"; public int Airports = 100; public List<string>? Icaos;
     public (int i, int n)? Shard; public int TaxiPerAirport = 6; public string Out = ""; public string? Trace;
+    public string? Scenario; public bool SelfTest; public string? Record;   // approach mode
+    public double? CaptureGain;                                             // approach mode, stage 4 apps
+    public string? Vertical;                                                // approach mode, stage 5 apps: name=value[,name=value...]
     public string? Sim, Db;
     public static Options? Parse(string[] a)
     {
@@ -1872,6 +1882,11 @@ sealed class Options
                 case "--taxi-per-airport": o.TaxiPerAirport = int.Parse(a[++i]); break;
                 case "--out": o.Out = a[++i]; break;
                 case "--trace": o.Trace = a[++i]; break;
+                case "--scenario": o.Scenario = a[++i]; break;
+                case "--selftest": o.SelfTest = true; break;
+                case "--record": o.Record = a[++i]; break;
+                case "--capture-gain": o.CaptureGain = double.Parse(a[++i], System.Globalization.CultureInfo.InvariantCulture); break;
+                case "--vertical": o.Vertical = a[++i]; break;
                 case "--sim": o.Sim = a[++i]; break;
                 case "--db": o.Db = a[++i]; break;
                 default: Console.WriteLine($"unknown option {a[i]}"); return null;
